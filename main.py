@@ -1,4 +1,5 @@
 from neo4j import GraphDatabase
+from typing import List
 
 import os
 
@@ -78,15 +79,97 @@ def import_coq_files():
         session.run("MATCH (n)-[:ns1__coqTarget]->(m) SET n.trans_name = m.uri").to_eager_result()
     driver.close()
 
+def update_labels():
+    labels = """
+ns0__as
+ns0__axiom
+ns0__definition
+ns0__derived
+ns0__example
+ns0__file
+ns0__folder
+ns0__library
+ns0__library-group
+ns0__object
+ns0__predicate
+ns0__primitive
+ns0__proposition
+ns0__revision
+ns0__role
+ns0__statement
+ns0__theory
+ns0__type
+""".split("\n")
+    for l in labels:
+        if not l: continue
+        lbl = l.replace("ns0__", "").replace("-", "_")
+        assert lbl != l
+        with get_driver().session() as sesion:
+            print(
+                sesion.run(
+                    f"MATCH (r:Resource) WHERE r.`{l}` IS NOT NULL SET r:{lbl}"
+                ).to_eager_result()
+            )
+
+def make_it_agda_like():
+
+    references = [
+        ("REFERENCE_BODY", ["ns0__uses"]),
+        ("REFERENCE_TYPE", ["ns1__coqHasInConclusion", "ns1__coqHasInHypothesis", "ns1__coqHasMainConclusion", "ns1__coqHasMainHypothesis"]),
+    ]
+
+    for (lbl, rels) in references:
+        with get_driver().session() as session:
+            for rel in rels:
+                print(
+                    session.run(
+                        f"MATCH (n)-[r:{rel}]->(m) MERGE (n)-[:{lbl}]->(m)"
+                    ).to_eager_result()
+                )
+
+def prepare_search_query(main_conclusion: str, in_conclusions: List[str], required_in_conclusion: List[str]):
+    TARGET_NAME = "XXX"
+    TARGET_NAME2 = "ZZZ"
+
+    initial_query = ",\n".join(
+        [f'({TARGET_NAME})-[:ns1__coqHasMainConclusion]->()-[:ns1__coqTarget]->(t{{uri:"{main_conclusion}"}})'] +
+        [
+            f'({TARGET_NAME})-[:ns1__coqHasInConclusion]->()-[:ns1__coqTarget]->(t{i}{{uri:"{in_conclusion}"}})' for (i, in_conclusion) in enumerate(in_conclusions)
+        ]
+    )
+
+    query = (f"MATCH \n"
+             f"{initial_query} \n"
+             f"WITH {TARGET_NAME} \n"
+             f"MATCH ({TARGET_NAME})-[:ns1__coqHasInConclusion]->()-[:ns1__coqTarget]->({TARGET_NAME2})\n"
+             f"WITH {TARGET_NAME}, COLLECT({TARGET_NAME2}.uri) as c\n"
+             f"WHERE apoc.coll.containsAll({required_in_conclusion}, c)\n"
+             f"RETURN {TARGET_NAME}.uri\n"
+             )
+
+    return query
+
 if __name__ == "__main__":
-    create_initial_constraints()
-    import_coq_files()
+    #create_initial_constraints()
+    #import_coq_files()
+
+    # update_labels()
+    # make_it_agda_like()
+
+    print(
+        prepare_search_query(
+            "cic:/Coq/Init/Logic/eq.ind#0",
+            ["cic:/Coquelicot/Rbar/Rbar_plus.con"],
+            ["cic:/Coquelicot/Rbar/Rbar.ind#0", "cic:/Coquelicot/Rbar/Rbar_plus.con"]
+    ))
+
+    pass
 
 # Example query
 """
 MATCH 
-(XXX)-[:ns1__coqHasMainConclusion]->(dummy)-[:ns1__coqTarget]->(t{uri:"cic:/Coq/Init/Logic/eq.ind#0"}), 
-(XXX)-[:ns1__coqHasInConclusion]->(dummy1)-[:ns1__coqTarget]->(t2{uri:"cic:/Coquelicot/Rbar/Rbar_plus.con"}) 
+(XXX)-[:ns1__coqHasMainConclusion]->()-[:ns1__coqTarget]->(t{uri:"cic:/Coq/Init/Logic/eq.ind#0"}), 
+(XXX)-[:ns1__coqHasInConclusion]->()-[:ns1__coqTarget]->(t2{uri:"cic:/Coquelicot/Rbar/Rbar_plus.con"}) 
 WITH XXX 
 MATCH (XXX)-[:ns1__coqHasInConclusion]->(dummy)-[:ns1__coqTarget]->(ZZZ)
 
