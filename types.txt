@@ -1,0 +1,2 @@
+['axiom', 'class', 'codatatype', 'coinductive_definition', 'const', 'datatype', 'definition', 'document_heading', 'inductive_definition', 'locale', 'locale_dependency', 'proof_text', 'recursive_definition', 'specification', 'theory', 'thm', 'type']
+['defines', 'instance-of', 'justifies', 'specified-in', 'specifies', 'uses']

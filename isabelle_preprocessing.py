@@ -46,6 +46,13 @@ def postprocess_name(qualified_name):
     return modules, name
 
 
+def post_process_node_type(node_type: str | None):
+    if node_type is None or "?" not in node_type:
+        return node_type
+    else:
+        return node_type[:node_type.find("?")]
+
+
 def process_file(file: str):
     description_pattern = re.compile(r"<rdf:Description.+?</rdf:Description>", flags=re.DOTALL)
     with open(file, encoding="utf-8") as f:
@@ -80,10 +87,12 @@ def process_file(file: str):
                 node_type = "theory"
             else:
                 node_type = "unknown"
+                print(file, about_match.group(0))
+                exit(21)
         full_name = name + "|" + node_type
         modules, name = postprocess_name(name)
         assert full_name not in nodes, (full_name, file)
-        nodes[full_name] = (name, node_type)
+        nodes[full_name] = (name, post_process_node_type(node_type))
         all_modules.update(modules)
         # Process its edges
         for e_match in edge_pattern.finditer(everything):
@@ -198,7 +207,7 @@ def post_process_file(file: str):
         f.write(inhalten)
 
 
-def execute_cypher():
+def execute_naive_cypher():
     def load_imported():
         so_far = set()
         if os.path.exists(IMPORT_FILE):
@@ -240,7 +249,32 @@ def execute_cypher():
             print(known, file=f)
 
 
-# unzip_everything(True)
+# unzip_everything(False)
 # execute_cypher()
 # process_files()
-# a, b, c = process_file(r"C:\Users\matej\git\dagstuhl-afp-neo4j\AFP-master-rdf\rdf\Algebraic_Numbers\Algebraic_Numbers.Compare_Complex.rdf")
+
+
+def find_all_node_and_edge_types():
+    node_types = set()
+    edge_types = set()
+    for file in os.listdir("."):
+        if not(file.startswith("isabelle") and file.endswith(".txt")):
+            continue
+        mode = ""
+        with open(file, encoding="utf-8") as f:
+            for line in tqdm.tqdm(f):
+                if line.startswith("@@"):
+                    mode = line.strip()
+                elif mode == "@@nodes":
+                    _, tup = line.split("@@")
+                    _, node_type = eval(tup)
+                    node_types.add(node_type)
+                elif mode == "@@edge":
+                    tup, _ = line.split("@@")
+                    _, _, edge_type = eval(tup)
+                    edge_types.add(edge_type)
+    print(sorted(node_types))
+    print(sorted(edge_types))
+
+
+# find_all_node_and_edge_types()
